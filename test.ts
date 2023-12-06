@@ -1,13 +1,26 @@
-export type ModelParams = {
+import { AggregationError } from './custom-errors';
+
+type Metric = string;
+
+export type ModelBaseParams = {
   timestamp: string;
   duration: number;
-  [key: string]: any;
 };
 
+export type ModelMetricParams = {
+  [K in Metric]: K extends keyof ModelBaseParams ? never : string;
+};
+
+export type ModelParams = ModelBaseParams | ModelMetricParams;
+
 export type AggregationParams = {
-  "aggregation-metrics": string[];
+  "aggregation-metrics": Metric[];
   "aggregation-method": string;
 };
+
+export type AggregatedMetrics = Record<`aggregated-${Metric}`, number>
+
+const AVERAGES = ["av", "avg", "avrg", "average", "mean"];
 
 /**
  * @todo Refactor this function according to your best practices.
@@ -21,50 +34,54 @@ export type AggregationParams = {
  */
 
 // return type
-export async function execute(inputs: ModelParams[], params: AggregationParams) {
+export function execute(inputs: ModelParams[], params: AggregationParams): AggregatedMetrics {
+  
+  _validateInputParams(inputs, params);
+
+  const aggregates: AggregatedMetrics = {};
+
+  for (const metricName of params['aggregation-metrics']) {
+    aggregates[`aggregated-${metricName}`] = 0;
+
+    for (const input of inputs) {
+      if (!(metricName in input)) {
+        throw new AggregationError(`aggregation metric ${metricName} not found in input data`);
+      }
+      aggregates[`aggregated-${metricName}`] += parseFloat(input[metricName]);
+    };
+  }
+
+  if (AVERAGES.includes(params['aggregation-method'])) {
+    for (const metricName in aggregates) {
+      aggregates[metricName] /= inputs.length;
+    }
+  }
+
+  return aggregates;
+}
+
+function _validateInputParams(inputs: ModelParams[], params: AggregationParams) {
   if (inputs === undefined) {
-    throw new Error("Input data is missing");
+    throw new AggregationError("Input data is missing");
   }
 
   if (!Array.isArray(inputs)) {
-    throw new Error("Input data is not an array");
+    throw new AggregationError("Input data is not an array");
   }
 
-  // check for params existance
-
-  // add type for aggregate
-  const aggregates: Object[] = [];
-
-  for (const metricName of params["aggregation-metrics"]) {
-    let accumulator = 0;
-    // replace with .reduce
-    inputs.forEach((input) => {
-      if (!(metricName in input)) {
-        // error handling
-        throw new Error(
-          "aggregation metric " + metricName + "not found in input data"
-        );
-      }
-      accumulator += parseFloat(input[`${metricName}`]);
-    });
-    aggregates.push({ name: metricName, value: accumulator });
+  if (params === undefined) {
+    throw new AggregationError("Parameters data is missing");
+  }
+  
+  if (!Array.isArray(params['aggregation-metrics'])) {
+    throw new AggregationError("Parameters aggregation metrics data is not an array");
   }
 
-  const denominator = inputs.length;
-  const averages = ["av", "avg", "avrg", "average", "mean"];
+  if (params['aggregation-metrics'].length === 0) {
+    throw new AggregationError("Parameters aggregation metrics data array is empty");
+  }
 
-  // now returns array instead of object, use reduce
-  return inputs.map((input: ModelParams) => {
-    aggregates.forEach((item) => {
-      // take value directly instead of values[1]
-      const arr = Object.values(item);
-      let outValue = arr[1];
-      if (averages.includes(params["aggregation-method"])) {
-        outValue = outValue / denominator;
-      }
-      // take key directly
-      input["aggregate-" + arr[0]] = outValue;
-    });
-    return input;
-  });
+  if (typeof params['aggregation-method'] !== 'string') {
+    throw new AggregationError("Parameters aggregation method data is invalid");
+  }
 }
