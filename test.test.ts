@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 
-import { AggregationParams, ModelParams, execute } from './test.ts';
+import { AggregationParams, ModelParams, execute } from './test';
 
 
 describe('Metric aggregator', () => {

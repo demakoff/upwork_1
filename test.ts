@@ -2,23 +2,20 @@ import { AggregationError } from './custom-errors';
 
 type Metric = string;
 
-export type ModelBaseParams = {
+export type ModelParams = {
   timestamp: string;
   duration: number;
+  [key: Metric]: string | number;
 };
-
-export type ModelMetricParams = {
-  [K in Metric]: K extends keyof ModelBaseParams ? never : string;
-};
-
-export type ModelParams = ModelBaseParams | ModelMetricParams;
 
 export type AggregationParams = {
   "aggregation-metrics": Metric[];
   "aggregation-method": string;
 };
 
-export type AggregatedMetrics = Record<`aggregated-${Metric}`, number>
+type AggregatedMetricName = `aggregated-${Metric}`;
+
+export type AggregatedMetrics = Record<AggregatedMetricName, number>
 
 const AVERAGES = ["av", "avg", "avrg", "average", "mean"];
 
@@ -47,13 +44,16 @@ export function execute(inputs: ModelParams[], params: AggregationParams): Aggre
       if (!(metricName in input)) {
         throw new AggregationError(`aggregation metric ${metricName} not found in input data`);
       }
-      aggregates[`aggregated-${metricName}`] += parseFloat(input[metricName]);
+      
+      //if(typeof metricName === 'string') {
+        aggregates[`aggregated-${metricName}`] += parseFloat(input[metricName] as string);
+      //}
     };
   }
 
   if (AVERAGES.includes(params['aggregation-method'])) {
     for (const metricName in aggregates) {
-      aggregates[metricName] /= inputs.length;
+      aggregates[metricName as AggregatedMetricName] /= inputs.length;
     }
   }
 
